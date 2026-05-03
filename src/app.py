@@ -153,6 +153,7 @@ def auth_status(session_id: Optional[str] = Cookie(None)):
         return {"authenticated": False}
 
 
+@app.get("/")
 def root():
     return RedirectResponse(url="/static/index.html")
 
