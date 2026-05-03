@@ -48,9 +48,14 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchActivities();
   }
 
-  // Toggle user menu
+  // Toggle user menu or open login modal when not authenticated
   userBtn.addEventListener("click", () => {
-    userMenu.classList.toggle("hidden");
+    if (isAuthenticated) {
+      userMenu.classList.toggle("hidden");
+    } else {
+      loginModal.classList.remove("hidden");
+      userMenu.classList.add("hidden");
+    }
   });
 
   // Close user menu when clicking outside
@@ -60,12 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Open login modal when not authenticated
-  userBtn.addEventListener("dblclick", () => {
-    if (!isAuthenticated) {
-      loginModal.classList.remove("hidden");
-    }
-  });
+  // Remove double-click login behavior; normal click opens login modal now
 
   // Close modal when clicking close button
   closeBtn.addEventListener("click", () => {
