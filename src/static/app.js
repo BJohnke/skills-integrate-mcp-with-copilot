@@ -2,7 +2,139 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitiesList = document.getElementById("activities-list");
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
+  const signupContainer = document.getElementById("signup-container");
   const messageDiv = document.getElementById("message");
+  const userBtn = document.getElementById("user-btn");
+  const userMenu = document.getElementById("user-menu");
+  const userInfo = document.getElementById("user-info");
+  const logoutBtn = document.getElementById("logout-btn");
+  const loginModal = document.getElementById("login-modal");
+  const closeBtn = document.querySelector(".close-btn");
+  const loginForm = document.getElementById("login-form");
+  const loginMessage = document.getElementById("login-message");
+
+  let isAuthenticated = false;
+  let currentUser = null;
+
+  // Check authentication status on page load
+  async function checkAuthStatus() {
+    try {
+      const response = await fetch("/auth/status");
+      const data = await response.json();
+      isAuthenticated = data.authenticated;
+      currentUser = data.username;
+      updateUI();
+      fetchActivities();
+    } catch (error) {
+      console.error("Error checking auth status:", error);
+      fetchActivities();
+    }
+  }
+
+  // Update UI based on authentication status
+  function updateUI() {
+    if (isAuthenticated) {
+      userBtn.textContent = `👤 ${currentUser}`;
+      userInfo.innerHTML = `<p>Logged in as: <strong>${currentUser}</strong></p>`;
+      logoutBtn.classList.remove("hidden");
+      signupContainer.classList.remove("hidden");
+    } else {
+      userBtn.textContent = "👤 Login";
+      userInfo.innerHTML = "";
+      logoutBtn.classList.add("hidden");
+      signupContainer.classList.add("hidden");
+    }
+    // Refresh activities to show/hide delete buttons
+    fetchActivities();
+  }
+
+  // Toggle user menu or open login modal when not authenticated
+  userBtn.addEventListener("click", () => {
+    if (isAuthenticated) {
+      userMenu.classList.toggle("hidden");
+    } else {
+      loginModal.classList.remove("hidden");
+      userMenu.classList.add("hidden");
+    }
+  });
+
+  // Close user menu when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".user-section")) {
+      userMenu.classList.add("hidden");
+    }
+  });
+
+  // Remove double-click login behavior; normal click opens login modal now
+
+  // Close modal when clicking close button
+  closeBtn.addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+    loginMessage.classList.add("hidden");
+  });
+
+  // Close modal when clicking outside
+  loginModal.addEventListener("click", (e) => {
+    if (e.target === loginModal) {
+      loginModal.classList.add("hidden");
+    }
+  });
+
+  // Handle login form submission
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        loginMessage.textContent = result.message;
+        loginMessage.className = "success";
+        loginMessage.classList.remove("hidden");
+        
+        // Close modal and update UI
+        setTimeout(() => {
+          loginModal.classList.add("hidden");
+          loginForm.reset();
+          checkAuthStatus();
+        }, 1000);
+      } else {
+        const result = await response.json();
+        loginMessage.textContent = result.detail || "Login failed";
+        loginMessage.className = "error";
+        loginMessage.classList.remove("hidden");
+      }
+    } catch (error) {
+      loginMessage.textContent = "Error logging in. Please try again.";
+      loginMessage.className = "error";
+      loginMessage.classList.remove("hidden");
+      console.error("Error logging in:", error);
+    }
+  });
+
+  // Handle logout
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      const response = await fetch("/auth/logout", { method: "POST" });
+      if (response.ok) {
+        isAuthenticated = false;
+        currentUser = null;
+        updateUI();
+        userMenu.classList.add("hidden");
+      }
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
+  });
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -21,21 +153,26 @@ document.addEventListener("DOMContentLoaded", () => {
         const spotsLeft =
           details.max_participants - details.participants.length;
 
-        // Create participants HTML with delete icons instead of bullet points
-        const participantsHTML =
-          details.participants.length > 0
-            ? `<div class="participants-section">
-              <h5>Participants:</h5>
-              <ul class="participants-list">
-                ${details.participants
-                  .map(
-                    (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
-                  )
-                  .join("")}
-              </ul>
-            </div>`
-            : `<p><em>No participants yet</em></p>`;
+        // Create participants HTML with delete buttons (only for authenticated teachers)
+        let participantsHTML;
+        if (details.participants.length > 0) {
+          const participantItems = details.participants
+            .map((email) => {
+              const deleteBtn = isAuthenticated
+                ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>`
+                : "";
+              return `<li><span class="participant-email">${email}</span>${deleteBtn}</li>`;
+            })
+            .join("");
+          participantsHTML = `<div class="participants-section">
+            <h5>Participants:</h5>
+            <ul class="participants-list">
+              ${participantItems}
+            </ul>
+          </div>`;
+        } else {
+          participantsHTML = `<p><em>No participants yet</em></p>`;
+        }
 
         activityCard.innerHTML = `
           <h4>${name}</h4>
@@ -69,6 +206,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Handle unregister functionality
   async function handleUnregister(event) {
+    event.preventDefault();
     const button = event.target;
     const activity = button.getAttribute("data-activity");
     const email = button.getAttribute("data-email");
@@ -88,8 +226,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (response.ok) {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
-
-        // Refresh activities list to show updated participants
         fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
@@ -97,8 +233,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
       setTimeout(() => {
         messageDiv.classList.add("hidden");
       }, 5000);
@@ -133,8 +267,6 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
-
-        // Refresh activities list to show updated participants
         fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
@@ -142,8 +274,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
       setTimeout(() => {
         messageDiv.classList.add("hidden");
       }, 5000);
@@ -156,5 +286,5 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
-  fetchActivities();
+  checkAuthStatus();
 });
